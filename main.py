@@ -114,8 +114,6 @@ def update():
     else:
         lifetime = wh_set*1000/(f_sop[np.where(v >= v_set)][0] * v_set/3.6)
         liferange = lifetime * v_set
-        #print(v_set, np.where(v >= v_set)[0][0], lifetime)
-        #print(lifetime)
         text_boxBatlifeout.set_val(str(round(lifetime*100)/100))
         text_boxBatrangeout.set_val(str(round(liferange)))
     fig.canvas.draw_idle()
