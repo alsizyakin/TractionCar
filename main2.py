@@ -10,6 +10,66 @@ def moving_average(a, nl=3):
     ret[nl:] = ret[nl:] - ret[:-nl]
     return ret[nl - 1:] / nl
 
+class Motor:
+    n_max = 10000
+    torque = 350
+    power = 80000
+
+    def set_n_max(self,nm):
+        self.n_max = nm
+
+    def set_torque(self, t):
+        self.torque = t
+
+    def set_power(self, p):
+        p = float(p)
+        self.power = p
+
+    def calc(self):
+        self.n = np.arange(1, self.n_max, 1)
+        self.n = np.append(self.n, self.n_max)
+        self.trq = self.power / self.n * 60 / (2 * np.pi)
+        self.trq[-1] = 0
+        self.trq[np.where(self.trq > self.torque)] = self.torque
+        return [self.trq, self.n]
+    
+    
+class Vehicle:
+    __i = 23
+    __r_kol = 0.3
+    __mass = 1500
+    __cx = 0.3
+    __area = 5.5
+    __bat_capacity = 60
+
+    def set_i(self, i):
+        self.__i = i
+
+    def set_r_kol(self, r):
+        self.__r_kol = r
+
+    def set_mass(self, m):
+        self.__mass = m
+
+    def set_cx(self, c):
+        self.__cx = c
+
+    def set_area(self, a):
+        self.__area = a
+
+    def set_bat_capacity(self, cap):
+        self.__bat_capacity = cap
+
+    def calc(self, motor_data:list):
+        f = motor_data[0] * self.__i / self.__r_kol
+        v = motor_data[1] / self.__i / 60 * 2 * np.pi * self.__r_kol * 3.6
+        return [f, v]
+        
+
+
+
+M = Motor()
+V = Vehicle()
 
 acc_time100 = 0
 n_max = 10000
@@ -20,7 +80,7 @@ ramp = 0
 r_kol = 0.3
 amp = 0
 power = 80000
-i = 3
+#i = 3
 n = 0
 v = n
 
@@ -43,33 +103,20 @@ fig, ax = plt.subplots()
 fig.subplots_adjust(bottom=0.55, top=0.95, left=0.3)
 fig.set_figheight(10)
 fig.set_figwidth(10)
-l1, = ax.plot(0, 0, lw=9, color='g')
-l2, = ax.plot(0, 0 * n, lw=3, color='r')
-l3, = ax.plot(0, 0 * n, lw=5,color='b')
+maximum_force, = ax.plot(0, 0, lw=2)
+maximum_adhesion_force, = ax.plot(0, 0 * n, lw=2)
+traction_resistance, = ax.plot(0, 0 * n, lw=2)
 ax.grid()
 
 
 def update():
-    global ramp
-    global load
-    global i
-    global ax
-    global v
-    global trans_k_adhesion
-    global v_max
-    global n
-    global l1
-    global acc_time100
-    n = np.arange(1, n_max, 1)
-    n = np.append(n, n_max)
-    trq = power / n * 60 / (2 * np.pi)
-    trq[-1] = 0
-    trq[np.where(trq > amp)] = amp
-    trq *= i
-    f = trq / r_kol
-    v = n / i / 60 * 2 * np.pi * r_kol * 3.6
-    l1.set_ydata(f*1)
-    l1.set_xdata(v)
+
+    #motor_data = M.calc()
+    veh_data = V.calc(M.calc())
+    f = veh_data[0]
+    v = veh_data[1]
+    maximum_force.set_ydata(f)
+    maximum_force.set_xdata(v)
     ax.set_ylim(0, max(f) * 1.1)
     ax.set_xlim(0, max(v) * 1.1)
     mass_sum = mass + load
@@ -79,13 +126,12 @@ def update():
     f_sop = mass_sum * 9.81 * (k_sop * np.cos(ramp / 180 * np.pi) + np.sin(ramp / 180 * np.pi)) + \
         cx * face_area * (v / 3.6) ** 2
     f_sop /= 0.95  # kpd  of transmission
-    l2.set_ydata(f_sop)
-    l2.set_xdata(v)
+    maximum_adhesion_force.set_ydata(f_sop)
+    maximum_adhesion_force.set_xdata(v)
     f_rez = f
     f_rez[np.where(f_rez > f_adhesion)] = f_adhesion
-    l3.set_ydata(f_rez)
-    print(f_rez)
-    l3.set_xdata(v)
+    traction_resistance.set_ydata(f_rez)
+    traction_resistance.set_xdata(v)
 
     v_max_ind = (np.where(f_rez < f_sop))[0][0]
     v_max = v[v_max_ind]
@@ -122,7 +168,7 @@ def update():
 
     fig.canvas.draw_idle()
 
-
+#Slider section############################################################################################
 ax_ramp = fig.add_axes([0.25, 0.1, 0.65, 0.03])
 ax_load = fig.add_axes([0.25, 0.15, 0.65, 0.03])
 
@@ -138,7 +184,6 @@ slider_load = Slider(
     color="cyan"
 )
 
-
 def update_ramp(val):
     global ramp
     ramp = val
@@ -146,19 +191,16 @@ def update_ramp(val):
     text_boxRampProm.set_val(round(np.tan(ramp / 180 * np.pi) * 100000) / 100)
     update()
 
-
 slider_ramp.on_changed(update_ramp)
-
 
 def update_load(val):
     global load
     load = val
     update()
 
-
 slider_load.on_changed(update_load)
 
-
+#Result section########################################################################################################
 axbox = fig.add_axes([box_x_pos[0], box_y_pos[0], 0.1, 0.035])
 text_boxVout = TextBox(axbox, "Vmax", textalignment="center", color='lightgoldenrodyellow')
 
@@ -180,163 +222,103 @@ axbox = fig.add_axes([box_x_pos[1], box_y_pos[1], 0.1, 0.035])
 text_boxBatrangeout = TextBox(axbox, "Bat_range", textalignment="center", color='lightgoldenrodyellow')
 text_boxBatrangeout.set_val(0)
 
-
+#Input section#######################################################################################################
 def amplsub(expression):
-    global amp
-    amp = float(expression)
+    M.set_torque(float(expression))
     update()
-
 
 axbox = fig.add_axes([box_x_pos[0], box_y_pos[2], 0.1, 0.035])
 text_boxTrq = TextBox(axbox, "Torque", textalignment="center")
 text_boxTrq.on_submit(amplsub)
 text_boxTrq.set_val(350)
 
-
 def powersub(expression):
-    global power
-    power = float(expression)
+    M.set_power(float(expression))
     update()
-
 
 axbox = fig.add_axes([box_x_pos[1], box_y_pos[2], 0.1, 0.035])
 text_boxPwr = TextBox(axbox, "Power", textalignment="center")
-text_boxPwr.on_submit(powersub)
+text_boxPwr.on_submit(M.set_power)
+#text_boxPwr.on_submit(powersub)
 text_boxPwr.set_val(80000)
 
-
 def nmaxsub(expression):
-    global n_max
-    n_max = float(expression)
+    M.set_n_max(float(expression))
     update()
-
 
 axbox = fig.add_axes([box_x_pos[2], box_y_pos[2], 0.1, 0.035])
 text_boxNmax = TextBox(axbox, "n_max", textalignment="center")
 text_boxNmax.on_submit(nmaxsub)
 text_boxNmax.set_val(10000)
 
-
 def isub(expression):
-    global i
-    i = float(expression)
+    V.set_i(float(expression))
     update()
-
 
 axbox = fig.add_axes([box_x_pos[3], box_y_pos[4], 0.1, 0.035])
 text_boxIred = TextBox(axbox, "i", textalignment="center")
 text_boxIred.on_submit(isub)
 text_boxIred.set_val(23)
 
-
 def rkolsub(expression):
-    global r_kol
-    r_kol = float(expression)
+    V.set_r_kol(float(expression))
     update()
-
 
 axbox = fig.add_axes([box_x_pos[2], box_y_pos[4], 0.1, 0.035])
 text_boxRkol = TextBox(axbox, 'R_kol', textalignment="center")
 text_boxRkol.on_submit(rkolsub)
 text_boxRkol.set_val(0.3)
 
-
 def masssub(expression):
-    global mass
-    mass = float(expression)
+    V.set_mass(float(expression))
     update()
-
 
 axbox = fig.add_axes([box_x_pos[0], box_y_pos[3], 0.1, 0.035])
 text_boxMass = TextBox(axbox, "Mass", textalignment="center")
 text_boxMass.on_submit(masssub)
 text_boxMass.set_val(1500)
 
-
 def face_ar_sub(expression):
-    global face_area
-    face_area = float(expression)
+    V.set_area(float(expression))
     update()
-
 
 axbox = fig.add_axes([box_x_pos[1], box_y_pos[4], 0.1, 0.035])
 text_boxSquare = TextBox(axbox, "Face area", textalignment="center")
 text_boxSquare.on_submit(face_ar_sub)
 text_boxSquare.set_val(face_area)
 
-
 def cxsub(expression):
-    global cx
-    cx = float(expression)
+    V.set_cx(float(expression))
     update()
-
 
 axbox = fig.add_axes([box_x_pos[0], box_y_pos[4], 0.1, 0.035])
 text_boxCx = TextBox(axbox, "Cx", textalignment="center")
 text_boxCx.on_submit(cxsub)
 text_boxCx.set_val(cx)
 
-
-def Vsetsub(expression):
-    global v_set
-    v_set = float(expression)
-    update()
-
-
-axbox = fig.add_axes([box_x_pos[1], box_y_pos[3], 0.1, 0.035])
-text_boxVset = TextBox(axbox, "v_set", textalignment="center")
-text_boxVset.on_submit(Vsetsub)
-text_boxVset.set_val(v_set)
-
-
 def Whsetsub(expression):
-    global wh_set
-    wh_set = float(expression)
+    V.set_bat_capacity(float(expression))
     update()
-
 
 axbox = fig.add_axes([box_x_pos[2], box_y_pos[3], 0.1, 0.035])
 text_boxWhset = TextBox(axbox, "кWh_set", textalignment="center")
 text_boxWhset.on_submit(Whsetsub)
 text_boxWhset.set_val(wh_set)
 
+def Vsetsub(expression):
+    global v_set
+    v_set = float(expression)
+    update()
 
-ax_reset = fig.add_axes([0.05, box_y_pos[3], 0.1, 0.04])
-button0 = Button(ax_reset, 'Reset', hovercolor='0.975')
+axbox = fig.add_axes([box_x_pos[1], box_y_pos[3], 0.1, 0.035])
+text_boxVset = TextBox(axbox, "v_set", textalignment="center")
+text_boxVset.on_submit(Vsetsub)
+text_boxVset.set_val(v_set)
 
-
-def reset(event):
-    slider_ramp.reset()
-    slider_load.reset()
-    text_boxTrq.set_val(350)
-
-
-button0.on_clicked(reset)
-
-ax_save = fig.add_axes([0.05, box_y_pos[2], 0.1, 0.04])
-button1 = Button(ax_save, 'save', hovercolor='0.975')
-
-
-def save_data(event):
-    s = 1
-
-
-button1.on_clicked(save_data)
-
-ax_load = fig.add_axes([0.05, box_y_pos[1], 0.1, 0.04])
-button2 = Button(ax_load, 'load', hovercolor='0.975')
-
-
-def load_data(event):
-    s = 1
-
-
-button2.on_clicked(load_data)
-
+#RadioButtons section#################################################################################
 radioButtonColor = 'lightgoldenrodyellow'
 rax = fig.add_axes([0.05, 0.8, 0.15, 0.15], facecolor=radioButtonColor)
 radio = RadioButtons(rax, ('Asphault', 'Ground', 'Plow'))
-
 
 def roadtype(label):
     roaddict = {'Asphault': 0, 'Ground': 1, 'Plow': 2}
@@ -344,12 +326,10 @@ def roadtype(label):
     ind_resist = roaddict[label]
     update()
 
-
 radio.on_clicked(roadtype)
 
 rax = fig.add_axes([0.05, 0.6, 0.15, 0.15], facecolor=radioButtonColor)
 radio2 = RadioButtons(rax, ('HighPres', 'LowPres', 'MudTire'))
-
 
 def tiretype(label):
     tiredict = {'HighPres': 0, 'LowPres': 1, 'MudTire': 2}
@@ -357,12 +337,10 @@ def tiretype(label):
     ind_adhesion = tiredict[label]
     update()
 
-
 radio2.on_clicked(tiretype)
 
 rax = fig.add_axes([0.05, 0.4, 0.15, 0.15], facecolor=radioButtonColor)
 radio3 = RadioButtons(rax, ('AWD', '4x2', '6x4'))
-
 
 def transtype(label):
     transdict = {'AWD': 1, '4x2': 0.6, '6x4': 0.75}
@@ -370,7 +348,33 @@ def transtype(label):
     trans_k_adhesion = transdict[label]
     update()
 
-
 radio3.on_clicked(transtype)
+
+#Buttons section############################################################################################
+#ax_reset = fig.add_axes([0.05, box_y_pos[3], 0.1, 0.04])
+#button0 = Button(ax_reset, 'Reset', hovercolor='0.975')
+
+#def reset(event):
+#    slider_ramp.reset()
+#    slider_load.reset()
+#    text_boxTrq.set_val(350)
+#
+#button0.on_clicked(reset)
+#
+#ax_save = fig.add_axes([0.05, box_y_pos[2], 0.1, 0.04])
+#button1 = Button(ax_save, 'save', hovercolor='0.975')
+
+# def save_data(event):
+#     s = 1
+
+# button1.on_clicked(save_data)
+
+# ax_load = fig.add_axes([0.05, box_y_pos[1], 0.1, 0.04])
+# button2 = Button(ax_load, 'load', hovercolor='0.975')
+
+# def load_data(event):
+#     s = 1
+
+# button2.on_clicked(load_data)
 
 plt.show()
